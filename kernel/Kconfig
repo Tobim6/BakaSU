@@ -45,6 +45,19 @@ config KSU_FULL_NAME_FORMAT
         %BRANCH_NAME% = current Git branch name
         %KSU_VERSION% = KSU version code
 
+config KSU_ADB_ROOT_SHELL_ESCAPE
+	bool "adb root: escape the adbd shell to root in the kernel (statically linked adbd)"
+	depends on KSU && !KSU_TRACEPOINT_HOOK
+	default n
+	help
+	  The "adb root" feature normally preloads libadbroot.so into adbd through LD_PRELOAD.
+	  That cannot work when adbd is a statically linked executable (Android 9 and older):
+	  there is no dynamic linker, the library never runs, and LD_PRELOAD leaks into every
+	  adb shell, which then fails to start ("library libadbroot.so not found").
+	  With this option the kernel does not inject LD_PRELOAD. Instead, when the "adb root"
+	  feature is enabled, the shell that adbd forks (uid 2000, exec of /system/bin/sh)
+	  is switched to root in the ksu SELinux domain.
+
 config KSU_DISABLE_MANAGER
 	bool "Disable KernelSU manager integration"
 	depends on KSU

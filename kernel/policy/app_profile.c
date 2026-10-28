@@ -281,6 +281,58 @@ void escape_to_root_for_init(void)
     commit_creds(cred);
 }
 
+/*
+ * Make the shell that adbd forked a full root shell (uid/gid 0, all capabilities, ksu domain).
+ * Used for "adb root" when adbd is statically linked and libadbroot.so cannot be preloaded.
+ */
+void escape_to_root_for_adb_shell(void)
+{
+    struct cred *cred = prepare_creds();
+    struct user_struct *new_user;
+
+    if (!cred) {
+        pr_err("Failed to prepare adb shell's creds!\n");
+        return;
+    }
+
+    cred->uid = cred->euid = cred->suid = cred->fsuid = GLOBAL_ROOT_UID;
+    cred->gid = cred->egid = cred->sgid = cred->fsgid = GLOBAL_ROOT_GID;
+    cred->securebits = 0;
+
+#if defined(KSU_HAS_MODERN_ALLOC_UID) || LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)
+    new_user = alloc_uid(cred->uid);
+#else
+    new_user = alloc_uid(current_user_ns(), cred->uid);
+#endif
+    if (!new_user) {
+        abort_creds(cred);
+        return;
+    }
+    free_uid(cred->user);
+    cred->user = new_user;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+    if (set_cred_ucounts(cred)) {
+        abort_creds(cred);
+        return;
+    }
+#endif
+
+    cred->cap_effective = CAP_FULL_SET;
+    cred->cap_permitted = CAP_FULL_SET;
+    cred->cap_bset = CAP_FULL_SET;
+    cred->cap_inheritable = CAP_EMPTY_SET;
+    cred->cap_ambient = CAP_EMPTY_SET;
+
+    if (cred->group_info)
+        put_group_info(cred->group_info);
+    cred->group_info = get_group_info(&root_groups);
+
+    setup_selinux(KERNEL_SU_CONTEXT, cred);
+    commit_creds(cred);
+
+    disable_seccomp();
+}
+
 void __init ksu_app_profile_init(void)
 {
 #if NEED_BACKPORT_COMPAT

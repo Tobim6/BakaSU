@@ -445,6 +445,7 @@ int ksu_handle_execve_common(int *fd, const char **filename_ptr, void *argv, voi
 
 skip_check:
     filename = *filename_ptr;
+    ksu_adb_root_handle_shell_exec(filename);
     ksu_handle_execveat_init(filename_ptr, argv, envp);
 
 #ifdef KSU_COMPAT_USE_STATIC_KEY

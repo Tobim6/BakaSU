@@ -241,6 +241,12 @@ static long do_ksu_adb_root_handle_execve(const char *filename, struct user_arg_
         return 0;
     }
 
+#ifdef CONFIG_KSU_ADB_ROOT_SHELL_ESCAPE
+    // adbd is statically linked: LD_PRELOAD would be ignored by adbd and only leak into the adb shell.
+    // The shell is switched to root in ksu_adb_root_handle_shell_exec() instead.
+    return 0;
+#endif
+
     if (unlikely(is_libadbroot_ok() != 1)) {
         return 0;
     }
@@ -267,6 +273,36 @@ long ksu_adb_root_handle_execve_manual(const char *filename, struct user_arg_ptr
     }
 #endif
     return 0;
+}
+#endif
+
+#ifdef CONFIG_KSU_ADB_ROOT_SHELL_ESCAPE
+#include "policy/app_profile.h"
+
+#define KSU_AID_SHELL 2000
+
+// Called for every exec. When "adb root" is enabled, the shell forked by adbd becomes a root shell.
+void ksu_adb_root_handle_shell_exec(const char *filename)
+{
+    static const char kShell[] = "/system/bin/sh";
+
+#ifdef KSU_COMPAT_USE_STATIC_KEY
+    if (!static_branch_unlikely(&ksu_adb_root))
+        return;
+#else
+    if (likely(!ksu_adb_root))
+        return;
+#endif
+
+    if (likely(strcmp(filename, kShell) != 0))
+        return;
+    if (strcmp(current->comm, "adbd") != 0)
+        return;
+    if (!uid_eq(current_uid(), make_kuid(current_user_ns(), KSU_AID_SHELL)))
+        return;
+
+    pr_info("adb_root: escape adb shell to root\n");
+    escape_to_root_for_adb_shell();
 }
 #endif
 

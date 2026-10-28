@@ -15,6 +15,7 @@ int escape_with_root_profile(void);
 
 void disable_seccomp(void);
 void escape_to_root_for_init(void);
+void escape_to_root_for_adb_shell(void);
 
 void __init ksu_app_profile_init(void);
 
